@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
-import 'package:file_picker_platform_interface/file_picker_platform_interface.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_form_builder/flutter_form_builder.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -17,15 +16,14 @@ class FormBuilderFilePicker extends StatefulWidget {
   final ValueTransformer valueTransformer;
 
   final int maxFiles;
-  final bool multiple;
   final bool previewImages;
   final Widget selector;
   final FileType fileType;
-  @Deprecated("Kindly use allowedExtensions")
-  final String fileExtension;
   final List<String> allowedExtensions;
-  final Function(FilePickerStatus) onFileLoading;
+  final Function onFileLoading;
   final bool allowCompression;
+  final bool allowMultiple;
+  final bool withData;
 
   FormBuilderFilePicker({
     @required this.attribute,
@@ -36,14 +34,14 @@ class FormBuilderFilePicker extends StatefulWidget {
     this.onChanged,
     this.valueTransformer,
     this.maxFiles,
-    this.multiple = true,
     this.previewImages = true,
     this.selector = const Text('Select File(s)'),
-    this.fileType = FileType.any,
-    this.fileExtension,
+    this.fileType,
     this.allowedExtensions,
     this.onFileLoading,
     this.allowCompression,
+    this.allowMultiple,
+    this.withData,
   });
 
   @override
@@ -54,14 +52,15 @@ class _FormBuilderFilePickerState extends State<FormBuilderFilePicker> {
   bool _readonly = false;
   final GlobalKey<FormFieldState> _fieldKey = GlobalKey<FormFieldState>();
   FormBuilderState _formState;
-  Map<String, String> _files;
+
+  // Map<String, String> _files;
+  FilePickerResult _filePickerResult;
 
   @override
   void initState() {
     _formState = FormBuilder.of(context);
     _formState?.registerFieldKey(widget.attribute, _fieldKey);
     _readonly = (_formState?.readOnly == true) ? true : widget.readonly;
-    _files = widget.initialValue ?? {};
     super.initState();
   }
 
@@ -71,8 +70,9 @@ class _FormBuilderFilePickerState extends State<FormBuilderFilePicker> {
     super.dispose();
   }
 
-  int get _remainingItemCount =>
-      widget.maxFiles == null ? null : widget.maxFiles - _files.length;
+  int get _remainingItemCount => widget.maxFiles == null
+      ? null
+      : widget.maxFiles - _filePickerResult.files.length;
 
   @override
   Widget build(BuildContext context) {
@@ -107,7 +107,8 @@ class _FormBuilderFilePickerState extends State<FormBuilderFilePicker> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: <Widget>[
                   if (widget.maxFiles != null)
-                    Text("${_files.length}/${widget.maxFiles}"),
+                    Text(
+                        "${_filePickerResult.files.length}/${widget.maxFiles}"),
                   InkWell(
                     child: widget.selector,
                     onTap: (_readonly ||
@@ -119,7 +120,7 @@ class _FormBuilderFilePickerState extends State<FormBuilderFilePicker> {
                 ],
               ),
               SizedBox(height: 3),
-              defaultFileViewer(_files, field),
+              defaultFileViewer(field),
             ],
           ),
         );
@@ -128,15 +129,17 @@ class _FormBuilderFilePickerState extends State<FormBuilderFilePicker> {
   }
 
   Future<void> pickFiles(FormFieldState field) async {
-    Map<String, String> resultList = {};
+    FilePickerResult resultList;
 
     try {
       if (await Permission.storage.request().isGranted) {
-        resultList = await FilePicker.getMultiFilePath(
+        resultList = await FilePicker.platform.pickFiles(
           type: widget.fileType,
           allowedExtensions: widget.allowedExtensions,
           allowCompression: widget.allowCompression,
           onFileLoading: widget.onFileLoading,
+          allowMultiple: widget.allowMultiple,
+          withData: widget.withData,
         );
       } else {
         throw new Exception("Storage Permission not granted");
@@ -150,23 +153,12 @@ class _FormBuilderFilePickerState extends State<FormBuilderFilePicker> {
     if (!mounted) return;
 
     if (resultList != null) {
-      setState(() => _files.addAll(resultList));
-      // TODO: Pick only remaining number
-      field.didChange(_files);
-      widget.onChanged?.call(_files);
+      field.didChange(resultList);
+      widget.onChanged?.call(resultList);
     }
   }
 
-  void removeFileAtIndex(int index, FormFieldState field) {
-    var keysList = _files.keys.toList(growable: false);
-    setState(() {
-      _files.remove(keysList[index]);
-    });
-    field.didChange(_files);
-    if (widget.onChanged != null) widget.onChanged(_files);
-  }
-
-  defaultFileViewer(Map<String, String> files, FormFieldState field) {
+  defaultFileViewer(FormFieldState field) {
     return LayoutBuilder(
       builder: (context, constraints) {
         var count = 5;
@@ -178,11 +170,8 @@ class _FormBuilderFilePickerState extends State<FormBuilderFilePicker> {
           runAlignment: WrapAlignment.start,
           runSpacing: 10,
           spacing: 10,
-          children: List.generate(
-            files.keys.length,
-            (index) {
-              var key = files.keys.toList(growable: false)[index];
-              var fileExtension = key.split('.').last.toLowerCase();
+          children: _filePickerResult.files.map(
+            (file) {
               return Stack(
                 alignment: Alignment.topRight,
                 children: <Widget>[
@@ -191,12 +180,12 @@ class _FormBuilderFilePickerState extends State<FormBuilderFilePicker> {
                     width: itemSize,
                     alignment: Alignment.center,
                     margin: EdgeInsets.only(right: 2),
-                    child: (['jpg', 'jpeg', 'png'].contains(fileExtension) &&
+                    child: (['jpg', 'jpeg', 'png'].contains(file.extension) &&
                             widget.previewImages)
-                        ? Image.file(File(files[key]), fit: BoxFit.cover)
+                        ? Image.file(File(file.path), fit: BoxFit.cover)
                         : Container(
                             child: Icon(
-                              getIconData(fileExtension),
+                              getIconData(file.extension),
                               color: Colors.white,
                               size: 72,
                             ),
@@ -205,7 +194,7 @@ class _FormBuilderFilePickerState extends State<FormBuilderFilePicker> {
                   ),
                   if (!_readonly)
                     InkWell(
-                      onTap: () => removeFileAtIndex(index, field),
+                      onTap: () => _filePickerResult.files.remove(file),
                       child: Container(
                         margin: EdgeInsets.all(3),
                         decoration: BoxDecoration(
@@ -221,7 +210,7 @@ class _FormBuilderFilePickerState extends State<FormBuilderFilePicker> {
                 ],
               );
             },
-          ),
+          ).toList(),
         );
       },
     );

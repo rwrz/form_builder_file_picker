@@ -9,9 +9,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Flutter Demo',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-      ),
+      theme: ThemeData(primarySwatch: Colors.blue),
       home: MyHomePage(),
     );
   }
@@ -28,9 +26,7 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text("FormBuilder FilePicker Example"),
-      ),
+      appBar: AppBar(title: Text("FormBuilder FilePicker Example")),
       body: Padding(
         padding: EdgeInsets.all(10),
         child: FormBuilder(
@@ -41,10 +37,8 @@ class _MyHomePageState extends State<MyHomePage> {
                 attribute: "images",
                 decoration: InputDecoration(labelText: "Attachments"),
                 maxFiles: null,
-                multiple: true,
                 previewImages: true,
                 onChanged: (val) => print(val),
-                fileExtension: "PDF",
                 fileType: FileType.custom,
                 selector: Row(
                   children: <Widget>[
