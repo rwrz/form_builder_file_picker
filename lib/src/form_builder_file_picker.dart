@@ -8,6 +8,8 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_form_builder/flutter_form_builder.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+
 
 /// Field for image(s) from user device storage
 class FormBuilderFilePicker extends FormBuilderField<List<PlatformFile>> {
@@ -154,7 +156,7 @@ class _FormBuilderFilePickerState
     FilePickerResult? resultList;
 
     try {
-      if (await Permission.storage.request().isGranted) {
+      if (kIsWeb || await Permission.storage.request().isGranted) {
         resultList = await FilePicker.platform.pickFiles(
           type: widget.type,
           allowedExtensions: widget.allowedExtensions,
@@ -239,7 +241,7 @@ class _FormBuilderFilePickerState
                       width: double.infinity,
                       color: Colors.white.withOpacity(.8),
                       child: Text(
-                        files[index].name!,
+                        files[index].name,
                         style: theme.textTheme.caption,
                         maxLines: 2,
                         overflow: TextOverflow.clip,
